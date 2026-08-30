@@ -5,12 +5,13 @@ from google import genai
 # ==========================================
 # 1. CONFIGURATION
 # ==========================================
-NEO4J_URI = "neo4j+ssc://625bc80b.databases.neo4j.io"
-NEO4J_USER = "neo4j"
-NEO4J_PASSWORD = "WZgosUbAHE95TYqvmPsJvsrYAWoWMB_AZHnJKRnj_cs"  # <--- Put your Neo4j password here
+from dotenv import load_dotenv
+load_dotenv()
 
-GEMINI_API_KEY = "AQ.Ab8RN6JXwdiGl2D3BaNEPOuwZ_Cb-AvztNHE_TGpnAB4xQvN9g"  # <--- Put your Google Gemini API key here
-
+NEO4J_URI = os.getenv("NEO4J_URI", "neo4j+ssc://625bc80b.databases.neo4j.io")
+NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # Initialize Google GenAI Client
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -97,7 +98,7 @@ def afcfta_graph_rag(driver, user_question):
     Instructions: Provide a clear, professional trade advisory response explaining the export path, applicable tariff/duty rates under AfCFTA, required documentation, and regulatory compliance bodies.
     """
     
-    # Step C: Use Chat API with gemini-3.6-flash (eliminates AFC warnings & 404 errors)
+    # Step C: Use Chat API with gemini-3.6-flash 
     chat = client.chats.create(model='gemini-3.6-flash')
     response = chat.send_message(prompt)
     return response.text
