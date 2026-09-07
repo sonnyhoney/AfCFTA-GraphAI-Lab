@@ -5,13 +5,15 @@ from google import genai
 # ==========================================
 # 1. CONFIGURATION
 # ==========================================
-from dotenv import load_dotenv
-load_dotenv()
 
-NEO4J_URI = os.getenv("NEO4J_URI", "neo4j+ssc://625bc80b.databases.neo4j.io")
-NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
+NEO4J_URI = os.getenv("NEO4J_URI", "neo4j+ssc://51204372.databases.neo4j.io")
+NEO4J_USER = os.getenv("NEO4J_USER", "51204372")  # <--- Updated username fallback
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
 # Initialize Google GenAI Client
 client = genai.Client(api_key=GEMINI_API_KEY)
 
