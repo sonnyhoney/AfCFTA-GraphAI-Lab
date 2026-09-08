@@ -2,6 +2,8 @@ import os
 import json
 import streamlit as st
 import pymupdf
+import docx
+import pandas as pd
 from neo4j import GraphDatabase
 from google import genai
 from dotenv import load_dotenv
@@ -54,13 +56,44 @@ def get_gemini_client():
     return genai.Client(api_key=GEMINI_API_KEY)
 
 # ==========================================
-# UNIVERSAL PDF EXTRACTION & NEO4J INGESTION
+# FILE PARSER HELPER (PDF, DOCX, CSV, TXT, MD)
+# ==========================================
+def extract_text_from_file(uploaded_file):
+    filename = uploaded_file.name.lower()
+    
+    if filename.endswith(".pdf"):
+        with open("temp_ingest.pdf", "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        doc = pymupdf.open("temp_ingest.pdf")
+        text = ""
+        for page in doc:
+            text += page.get_text() + "\n"
+        return text.strip(), "pdf"
+        
+    elif filename.endswith(".docx"):
+        doc = docx.Document(uploaded_file)
+        text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+        return text.strip(), "docx"
+        
+    elif filename.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+        text = df.to_string(index=False)
+        return text.strip(), "csv"
+        
+    elif filename.endswith(".txt") or filename.endswith(".md"):
+        text = uploaded_file.read().decode("utf-8")
+        return text.strip(), "txt"
+        
+    return "", "unknown"
+
+# ==========================================
+# UNIVERSAL EXTRACTION & NEO4J INGESTION
 # ==========================================
 def extract_universal_knowledge_graph(text_chunk):
     client = get_gemini_client()
     prompt = f"""
     Analyze the following document text and extract structured knowledge graph entities and relationships.
-    This could be a trade document, bank statement, contract, letter, or official report.
+    This could be a trade document, bank statement, contract, CSV data, invoice, or official report.
 
     DOCUMENT TEXT:
     {text_chunk}
@@ -77,7 +110,7 @@ def extract_universal_knowledge_graph(text_chunk):
       ]
     }}
 
-    Return ONLY a valid JSON object. Do not include markdown code block syntax or conversational text.
+    Return ONLY a valid JSON object. Do not include markdown code block syntax.
     """
     chat = client.chats.create(model='gemini-3.6-flash')
     response = chat.send_message(prompt)
@@ -89,8 +122,7 @@ def save_universal_triples_to_neo4j(graph_data):
         for node in graph_data.get("nodes", []):
             label = node.get("label", "Entity").replace(" ", "_")
             node_id = node.get("id")
-            if not node_id:
-                continue
+            if not node_id: continue
             session.run(f"MERGE (n:`{label}` {{name: $name}})", name=str(node_id))
                 
         for rel in graph_data.get("relationships", []):
@@ -106,15 +138,12 @@ def save_universal_triples_to_neo4j(graph_data):
                 session.run(cypher, source=str(source), target=str(target))
 
 # ==========================================
-# DYNAMIC KEYWORD-FILTERED GRAPHRAG SEARCH
+# DYNAMIC GRAPHRAG SEARCH
 # ==========================================
 def execute_smart_graphrag(question):
     client = get_gemini_client()
-    
-    # Extract keywords from user question
     keywords = [word.strip().lower() for word in question.split() if len(word) > 2]
     
-    # Corrected Cypher query passing r2 through the WITH clause
     cypher_retrieval = """
     MATCH (a)-[r]->(b)
     OPTIONAL MATCH (b)-[r2]->(c)
@@ -153,8 +182,7 @@ def execute_smart_graphrag(question):
 
     Instructions:
     - Directly and accurately answer the user's query based on the facts.
-    - If the query is about AfCFTA trade, format your response as a Trade Advisory Report.
-    - If the query is about a bank statement, person, organization, or document, provide a clear, professional analytical response answering the question directly.
+    - Format your response as a professional, structured analytical report with clear headings.
     - If the context does not contain the requested information, explicitly state what is missing.
     """
     
@@ -162,15 +190,13 @@ def execute_smart_graphrag(question):
     response = chat.send_message(prompt)
     return response.text, graph_facts
 
-# ==========================================
 # SIDEBAR ARCHITECTURE
-# ==========================================
 st.sidebar.markdown("## ⚙️ Platform Engine Specs")
 st.sidebar.markdown("""
 - **Knowledge Engine:** Neo4j Aura Cloud GDS
 - **Reasoning Model:** Google Gemini 3.6 Flash
 - **Architecture:** Universal GraphRAG
-- **Data Ingestion:** Multimodal OCR & Universal Extraction
+- **Multi-Format Parser:** PDF, DOCX, CSV, TXT, MD
 
 ---
 ### 🛠️ Developer Info:
@@ -182,31 +208,27 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("[🐙 View GitHub Source Code](https://github.com/sonnyhoney/AfCFTA-GraphAI-Lab)")
 st.sidebar.markdown("[💼 Connect on LinkedIn](https://www.linkedin.com/in/agwu-eze)")
 
-# ==========================================
-# MAIN PLATFORM HEADER & METRICS
-# ==========================================
+# MAIN PLATFORM HEADER
 st.markdown('<p class="main-title">🌍 Universal GraphAI Platform</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">Enterprise Knowledge Graph & Intelligence System powered by Neo4j & Google Gemini</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">Enterprise Multi-Format Knowledge Graph & Intelligence System powered by Neo4j & Google Gemini</p>', unsafe_allow_html=True)
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.markdown('<div class="metric-card"><div class="metric-title">Knowledge Engine</div><div class="metric-value">Neo4j GDS Cloud</div></div>', unsafe_allow_html=True)
 with col2:
-    st.markdown('<div class="metric-card"><div class="metric-title">Accuracy Guarantee</div><div class="metric-value">100% Fact-Grounded</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="metric-card"><div class="metric-title">Supported Formats</div><div class="metric-value">PDF, DOCX, CSV, TXT</div></div>', unsafe_allow_html=True)
 with col3:
-    st.markdown('<div class="metric-card"><div class="metric-title">Search Scope</div><div class="metric-value">Dynamic Keyword Graph</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="metric-card"><div class="metric-title">Export Capabilities</div><div class="metric-value">MD, JSON, TXT</div></div>', unsafe_allow_html=True)
 with col4:
-    st.markdown('<div class="metric-card"><div class="metric-title">Inference Engine</div><div class="metric-value">Gemini Multimodal</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="metric-card"><div class="metric-title">Inference Engine</div><div class="metric-value">Gemini 3.6 Flash</div></div>', unsafe_allow_html=True)
 
 st.write("")
 st.write("")
 
-# ==========================================
 # PLATFORM TABS
-# ==========================================
-tab1, tab2, tab3 = st.tabs(["🔍 Intelligence Query Engine", "📄 Ingest Custom PDF Document", "📊 Knowledge Graph Inspector"])
+tab1, tab2, tab3 = st.tabs(["🔍 Intelligence Query Engine", "📄 Ingest Multi-Format Document", "📊 Knowledge Graph Inspector"])
 
-# TAB 1: QUERY ENGINE
+# TAB 1: QUERY ENGINE & EXPORT
 with tab1:
     st.markdown("### 💬 Enterprise Query Engine")
     
@@ -233,7 +255,39 @@ with tab1:
                 report, retrieved_facts = execute_smart_graphrag(user_query)
                 st.success("Analysis Complete — Grounded in Neo4j Knowledge Graph")
                 
+                # Display Analysis Report
                 st.markdown(report)
+                
+                st.write("---")
+                st.markdown("#### 📥 Download Advisory Report")
+                d_col1, d_col2, d_col3 = st.columns(3)
+                
+                with d_col1:
+                    st.download_button(
+                        label="📄 Download as Markdown (.md)",
+                        data=report,
+                        file_name="GraphAI_Advisory_Report.md",
+                        mime="text/markdown"
+                    )
+                with d_col2:
+                    export_data = {
+                        "user_query": user_query,
+                        "advisory_report": report,
+                        "retrieved_neo4j_facts": retrieved_facts
+                    }
+                    st.download_button(
+                        label="📊 Download as JSON (.json)",
+                        data=json.dumps(export_data, indent=2),
+                        file_name="GraphAI_Advisory_Report.json",
+                        mime="application/json"
+                    )
+                with d_col3:
+                    st.download_button(
+                        label="📝 Download as Text (.txt)",
+                        data=report,
+                        file_name="GraphAI_Advisory_Report.txt",
+                        mime="text/plain"
+                    )
                 
                 with st.expander("🔍 View Retracted Neo4j Source Facts (Audit Trail)"):
                     st.caption("The response above was generated strictly from the following retrieved graph relationships:")
@@ -243,29 +297,21 @@ with tab1:
             except Exception as e:
                 st.error(f"Execution Error: {e}")
 
-# TAB 2: PDF DOCUMENT INGESTION
+# TAB 2: MULTI-FORMAT DOCUMENT INGESTION
 with tab2:
-    st.markdown("### 📄 Universal PDF Ingestion Engine")
-    st.write("Upload ANY document (AfCFTA trade guide, bank statement, contract, invoice, or letter) to automatically extract entities into Neo4j.")
+    st.markdown("### 📄 Multi-Format Document Ingestion Engine")
+    st.write("Upload ANY document format (**PDF**, **DOCX**, **CSV**, **TXT**, or **MD**) to automatically extract Knowledge Graph entities into Neo4j.")
     
-    uploaded_file = st.file_uploader("Upload PDF Document", type=["pdf"])
+    uploaded_file = st.file_uploader("Upload Document (PDF, DOCX, CSV, TXT, MD)", type=["pdf", "docx", "csv", "txt", "md"])
     
     if uploaded_file is not None:
-        st.info(f"File uploaded: '{uploaded_file.name}' ({round(uploaded_file.size / (1024*1024), 2)} MB). Click below to parse into Neo4j triples.")
+        file_text, file_type = extract_text_from_file(uploaded_file)
+        st.info(f"File uploaded: '{uploaded_file.name}' (Format: {file_type.upper()}, Size: {round(uploaded_file.size / 1024, 1)} KB). Click below to parse into Neo4j triples.")
+        
         if st.button("⚡ Parse & Ingest Document into Neo4j"):
-            with st.spinner("Parsing PDF, extracting entities with Gemini, and saving to Neo4j..."):
+            with st.spinner(f"Parsing {file_type.upper()}, extracting entities with Gemini, and saving to Neo4j..."):
                 try:
-                    with open("temp_ingest.pdf", "wb") as f:
-                        f.write(uploaded_file.getbuffer())
-                    
-                    doc = pymupdf.open("temp_ingest.pdf")
-                    extracted_text = ""
-                    for page in doc:
-                        extracted_text += page.get_text() + "\n"
-                        
-                    clean_text = extracted_text.strip()
-                    
-                    if len(clean_text) < 100:
+                    if file_type == "pdf" and len(file_text) < 100:
                         st.warning("⚠️ Scanned Image PDF detected. Uploading to Gemini Multimodal Engine for OCR & Graph Extraction...")
                         client = get_gemini_client()
                         file_ref = client.files.upload(file="temp_ingest.pdf")
@@ -284,14 +330,14 @@ with tab2:
                         extracted_json = json.loads(clean_json)
                         st.success("✅ Scanned PDF parsed via Gemini Vision OCR!")
                     else:
-                        st.info(f"Digital PDF detected ({len(clean_text)} characters extracted). Processing with Gemini...")
-                        extracted_json = extract_universal_knowledge_graph(clean_text[:4000])
-                        st.success("✅ Digital PDF parsed successfully!")
+                        st.info(f"{file_type.upper()} text extracted ({len(file_text)} characters). Processing with Gemini...")
+                        extracted_json = extract_universal_knowledge_graph(file_text[:4000])
+                        st.success(f"✅ {file_type.upper()} parsed successfully!")
 
                     save_universal_triples_to_neo4j(extracted_json)
                     st.success("🎉 Knowledge Graph nodes & relationships successfully saved to Neo4j Cloud!")
                     
-                    with st.expander("📊 View Extracted Triples"):
+                    with st.expander("📊 View Extracted Knowledge Triples"):
                         st.json(extracted_json)
                         
                 except Exception as e:

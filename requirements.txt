@@ -1,0 +1,7 @@
+streamlit
+neo4j
+google-genai
+pymupdf
+python-docx
+pandas
+python-dotenv
