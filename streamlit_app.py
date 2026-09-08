@@ -19,7 +19,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 st.set_page_config(
     page_title="GraphAI | Enterprise Intelligence Platform",
-    page_icon="🌍",
+    page_icon="🕸️",  # <--- Change favicon here
     layout="wide"
 )
 
@@ -150,7 +150,7 @@ def save_universal_triples_to_neo4j(graph_data):
                 session.run(cypher, source=str(source), target=str(target))
 
 # ==========================================
-# DYNAMIC GRAPHRAG SEARCH
+# DYNAMIC GRAPHRAG SEARCH WITH INPUT VALIDATION
 # ==========================================
 def execute_smart_graphrag(question):
     client = get_gemini_client()
@@ -210,11 +210,6 @@ st.sidebar.markdown("""
 - **Architecture:** Universal GraphRAG
 - **Multi-Format Parser:** PDF, DOCX, CSV, TXT, MD
 - **Auto-Privacy:** Automatic Disk Cleanup
-
----
-### 🛠️ Developer Info:
-- **Lead Engineer:** Agwu Eze
-- **Specialization:** Graph AI & GenAI Systems
 """)
 
 st.sidebar.markdown("---")
@@ -222,7 +217,7 @@ st.sidebar.markdown("[🐙 View GitHub Source Code](https://github.com/sonnyhone
 st.sidebar.markdown("[💼 Connect on LinkedIn](https://www.linkedin.com/in/agwu-eze)")
 
 # MAIN PLATFORM HEADER
-st.markdown('<p class="main-title">🌍 Universal GraphAI Platform</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-title">🕸️ Universal GraphAI Platform</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Enterprise Multi-Format Knowledge Graph & Intelligence System powered by Neo4j & Google Gemini</p>', unsafe_allow_html=True)
 
 col1, col2, col3, col4 = st.columns(4)
@@ -241,7 +236,7 @@ st.write("")
 # PLATFORM TABS
 tab1, tab2, tab3 = st.tabs(["🔍 Intelligence Query Engine", "📄 Ingest Multi-Format Document", "📊 Knowledge Graph Inspector"])
 
-# TAB 1: QUERY ENGINE & EXPORT
+# TAB 1: QUERY ENGINE & EXPORT WITH INPUT VALIDATION
 with tab1:
     st.markdown("### 💬 Enterprise Query Engine")
     
@@ -249,67 +244,70 @@ with tab1:
         "Select a pre-configured query or type a custom question below:",
         [
             "Custom Search Query...",
-            "What is the name of the account holder in the bank statement?",
             "What are the rules, required documents, and regulatory approvals for exporting Processed Cocoa Powder from Ghana to Nigeria under AfCFTA?",
             "What are the duty rates and documents required for exporting Automotive Parts from South Africa to Kenya?",
             "How can Egypt export Phosphate Fertilizers to Nigeria under AfCFTA?"
         ]
     )
 
-    default_query = "What is the name of the account holder in the bank statement?"
+    default_query = ""
     if sample_scenario != "Custom Search Query...":
         default_query = sample_scenario
 
-    user_query = st.text_area("Enter Your Query:", value=default_query, height=90)
+    user_query = st.text_area("Enter Your Query:", value=default_query, height=90, placeholder="Type your trade, financial, or custom document query here...")
 
     if st.button("🚀 Execute GraphRAG Analysis"):
-        with st.spinner("Retrieving matched facts from Neo4j Knowledge Graph & reasoning with Gemini..."):
-            try:
-                report, retrieved_facts = execute_smart_graphrag(user_query)
-                st.success("Analysis Complete — Grounded in Neo4j Knowledge Graph")
-                
-                st.markdown(report)
-                
-                st.write("---")
-                st.markdown("#### 📥 Download Advisory Report")
-                d_col1, d_col2, d_col3 = st.columns(3)
-                
-                with d_col1:
-                    st.download_button(
-                        label="📄 Download as Markdown (.md)",
-                        data=report,
-                        file_name="GraphAI_Advisory_Report.md",
-                        mime="text/markdown"
-                    )
-                with d_col2:
-                    export_data = {
-                        "user_query": user_query,
-                        "advisory_report": report,
-                        "retrieved_neo4j_facts": retrieved_facts
-                    }
-                    st.download_button(
-                        label="📊 Download as JSON (.json)",
-                        data=json.dumps(export_data, indent=2),
-                        file_name="GraphAI_Advisory_Report.json",
-                        mime="application/json"
-                    )
-                with d_col3:
-                    st.download_button(
-                        label="📝 Download as Text (.txt)",
-                        data=report,
-                        file_name="GraphAI_Advisory_Report.txt",
-                        mime="text/plain"
-                    )
-                
-                with st.expander("🔍 View Retracted Neo4j Source Facts (Audit Trail)"):
-                    st.caption("The response above was generated strictly from the following retrieved graph relationships:")
-                    for fact in retrieved_facts[:20]:
-                        st.markdown(f"`{fact}`")
-                        
-            except Exception as e:
-                st.error(f"Execution Error: {e}")
+        # INPUT VALIDATION: Block empty queries!
+        if not user_query.strip():
+            st.warning("⚠️ Please enter a query or select a pre-configured scenario before running analysis.")
+        else:
+            with st.spinner("Retrieving matched facts from Neo4j Knowledge Graph & reasoning with Gemini..."):
+                try:
+                    report, retrieved_facts = execute_smart_graphrag(user_query)
+                    st.success("Analysis Complete — Grounded in Neo4j Knowledge Graph")
+                    
+                    st.markdown(report)
+                    
+                    st.write("---")
+                    st.markdown("#### 📥 Download Advisory Report")
+                    d_col1, d_col2, d_col3 = st.columns(3)
+                    
+                    with d_col1:
+                        st.download_button(
+                            label="📄 Download as Markdown (.md)",
+                            data=report,
+                            file_name="GraphAI_Advisory_Report.md",
+                            mime="text/markdown"
+                        )
+                    with d_col2:
+                        export_data = {
+                            "user_query": user_query,
+                            "advisory_report": report,
+                            "retrieved_neo4j_facts": retrieved_facts
+                        }
+                        st.download_button(
+                            label="📊 Download as JSON (.json)",
+                            data=json.dumps(export_data, indent=2),
+                            file_name="GraphAI_Advisory_Report.json",
+                            mime="application/json"
+                        )
+                    with d_col3:
+                        st.download_button(
+                            label="📝 Download as Text (.txt)",
+                            data=report,
+                            file_name="GraphAI_Advisory_Report.txt",
+                            mime="text/plain"
+                        )
+                    
+                    with st.expander("🔍 View Retracted Neo4j Source Facts (Audit Trail)"):
+                        st.caption("The response above was generated strictly from the following retrieved graph relationships:")
+                        for fact in retrieved_facts[:20]:
+                            st.markdown(f"`{fact}`")
+                            
+                except Exception as e:
+                    st.error(f"Execution Error: {e}")
 
-# TAB 2: MULTI-FORMAT DOCUMENT INGESTION (AUTOMATIC DISK CLEANUP ENABLED)
+# TAB 2: MULTI-FORMAT DOCUMENT INGESTION
 with tab2:
     st.markdown("### 📄 Multi-Format Document Ingestion Engine")
     st.write("Upload ANY document format (**PDF**, **DOCX**, **CSV**, **TXT**, or **MD**) to automatically extract Knowledge Graph entities into Neo4j.")
@@ -356,7 +354,6 @@ with tab2:
                     st.error(f"Ingestion error: {e}")
                     
                 finally:
-                    # AUTOMATIC DISK CLEANUP
                     cleanup_temp_files()
 
 # TAB 3: GRAPH INSPECTOR & DATABASE PURGING
