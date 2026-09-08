@@ -1,4 +1,5 @@
 import os
+import glob
 import json
 import streamlit as st
 import pymupdf
@@ -41,6 +42,17 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ==========================================
+# UNIVERSAL TEMPORARY FILE CLEANUP HELPER
+# ==========================================
+def cleanup_temp_files():
+    """Finds and automatically deletes all temporary upload files regardless of extension."""
+    for temp_file in glob.glob("temp_*"):
+        try:
+            os.remove(temp_file)
+        except Exception:
+            pass
+
 @st.cache_resource
 def get_neo4j_driver():
     return GraphDatabase.driver(
@@ -71,7 +83,9 @@ def extract_text_from_file(uploaded_file):
         return text.strip(), "pdf"
         
     elif filename.endswith(".docx"):
-        doc = docx.Document(uploaded_file)
+        with open("temp_ingest.docx", "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        doc = docx.Document("temp_ingest.docx")
         text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
         return text.strip(), "docx"
         
@@ -102,11 +116,9 @@ def extract_universal_knowledge_graph(text_chunk):
     {{
       "nodes": [
         {{"id": "EntityNameOrValue", "label": "EntityType"}} 
-        // Examples of EntityType: Person, AccountHolder, Bank, Organization, Country, Product, Policy, Amount, Date, Requirement
       ],
       "relationships": [
         {{"source": "EntityA", "type": "RELATIONSHIP_TYPE", "target": "EntityB"}}
-        // Examples: HAS_ACCOUNT, ISSUED_BY, EXPORTS, GOVERNED_BY, PAID_TO, HELD_BY
       ]
     }}
 
@@ -197,6 +209,7 @@ st.sidebar.markdown("""
 - **Reasoning Model:** Google Gemini 3.6 Flash
 - **Architecture:** Universal GraphRAG
 - **Multi-Format Parser:** PDF, DOCX, CSV, TXT, MD
+- **Auto-Privacy:** Automatic Disk Cleanup
 
 ---
 ### 🛠️ Developer Info:
@@ -255,7 +268,6 @@ with tab1:
                 report, retrieved_facts = execute_smart_graphrag(user_query)
                 st.success("Analysis Complete — Grounded in Neo4j Knowledge Graph")
                 
-                # Display Analysis Report
                 st.markdown(report)
                 
                 st.write("---")
@@ -297,7 +309,7 @@ with tab1:
             except Exception as e:
                 st.error(f"Execution Error: {e}")
 
-# TAB 2: MULTI-FORMAT DOCUMENT INGESTION
+# TAB 2: MULTI-FORMAT DOCUMENT INGESTION (AUTOMATIC DISK CLEANUP ENABLED)
 with tab2:
     st.markdown("### 📄 Multi-Format Document Ingestion Engine")
     st.write("Upload ANY document format (**PDF**, **DOCX**, **CSV**, **TXT**, or **MD**) to automatically extract Knowledge Graph entities into Neo4j.")
@@ -342,8 +354,12 @@ with tab2:
                         
                 except Exception as e:
                     st.error(f"Ingestion error: {e}")
+                    
+                finally:
+                    # AUTOMATIC DISK CLEANUP
+                    cleanup_temp_files()
 
-# TAB 3: GRAPH INSPECTOR
+# TAB 3: GRAPH INSPECTOR & DATABASE PURGING
 with tab3:
     st.markdown("### 📊 Active Knowledge Graph Statistics")
     st.write("Current entity labels loaded in Neo4j Aura Cloud:")
@@ -351,7 +367,36 @@ with tab3:
     try:
         with driver.session() as session:
             count_result = session.run("MATCH (n) RETURN labels(n)[0] AS Label, count(n) AS Count ORDER BY Count DESC")
-            for record in count_result:
-                st.markdown(f"- **{record['Label']} Nodes:** `{record['Count']}`")
+            records = list(count_result)
+            if records:
+                for record in records:
+                    st.markdown(f"- **{record['Label']} Nodes:** `{record['Count']}`")
+            else:
+                st.info("Database is currently empty.")
     except Exception as e:
         st.error(f"Could not load graph metrics: {e}")
+        
+    st.write("---")
+    st.markdown("### 🗑️ Database Management & Data Purging")
+    st.caption("Remove ingested knowledge or reset your Neo4j Cloud instance.")
+    
+    col_del1, col_del2 = st.columns(2)
+    
+    with col_del1:
+        doc_to_delete = st.text_input("Enter Document Name to Delete (e.g. bank_statement.pdf):")
+        if st.button("❌ Delete Specific Document Nodes"):
+            if doc_to_delete:
+                with driver.session() as session:
+                    session.run("MATCH (n {source_doc: $doc_name}) DETACH DELETE n", doc_name=doc_to_delete)
+                st.success(f"Deleted all nodes associated with '{doc_to_delete}'!")
+                st.rerun()
+            else:
+                st.warning("Please enter a document name to delete.")
+                
+    with col_del2:
+        st.markdown("**Reset Database**")
+        if st.button("⚠️ Clear Entire Neo4j Database"):
+            with driver.session() as session:
+                session.run("MATCH (n) DETACH DELETE n")
+            st.success("🎉 Entire Neo4j Database successfully wiped clean!")
+            st.rerun()
